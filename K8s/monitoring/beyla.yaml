@@ -63,6 +63,8 @@ data:
     prometheus_export:
       port: 9090
       path: /metrics
+    otel_traces_export:
+      endpoint: http://otel-collector.tracing.svc.cluster.local:4318
 ---
 apiVersion: apps/v1
 kind: DaemonSet
