@@ -26,8 +26,8 @@ spec:
         # it's Java it needs lots of memory
         resources:
           limits:
-            cpu: 200m
-            memory: 1000Mi
+            cpu: 1000m
+            memory: 1500Mi
           requests:
             cpu: 100m
             memory: 500Mi

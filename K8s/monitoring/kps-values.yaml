@@ -25,6 +25,12 @@ prometheus:
       limits: { memory: 2Gi }
 
 grafana:
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki.logging.svc.cluster.local:3100
   # Admin login comes from a Secret created outside git (no password in this file)
   admin:
     existingSecret: grafana-admin
