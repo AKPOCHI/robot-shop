@@ -46,6 +46,34 @@ grafana:
 
 alertmanager:
   alertmanagerSpec:
+    # Mounts Secret "alertmanager-slack" at /etc/alertmanager/secrets/alertmanager-slack/
+    secrets:
+      - alertmanager-slack
     resources:
       requests: { cpu: 50m, memory: 64Mi }
       limits: { memory: 256Mi }
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: "null"                 # default: drop (Watchdog and other built-ins)
+      group_by: [alertname, slo]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: slack-slo          # only SLO alerts reach Slack
+          matchers:
+            - slo = "web-availability"
+    receivers:
+      - name: "null"
+      - name: slack-slo
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/webhook-url
+            send_resolved: true
+            title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+            text: |-
+              {{ range .Alerts }}*{{ .Annotations.summary }}*
+              {{ .Annotations.description }}
+              Policy / runbook: {{ .Annotations.runbook_url }}
+              {{ end }}

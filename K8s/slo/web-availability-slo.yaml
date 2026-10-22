@@ -1,0 +1,72 @@
+# SLO: web availability >= 99.5% of requests succeed (non-5xx), rolling 30 days.
+# SLI source: Beyla eBPF metric http_server_request_duration_seconds_count (Step 2).
+# Error budget = 0.5% of requests. Alerts use multi-window, multi-burn-rate
+# (Google SRE Workbook, ch. 5). Policy: docs/slo/error-budget-policy.md
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: web-availability-slo
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: robot-shop
+spec:
+  groups:
+    - name: slo-web-availability-sli
+      interval: 30s
+      rules:
+        # Error ratio (5xx / all) for web over several windows
+        - record: slo:web_error_ratio:rate5m
+          expr: |
+            (sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web", http_response_status_code=~"5.."}[5m])) or vector(0))
+            /
+            sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web"}[5m]))
+        - record: slo:web_error_ratio:rate30m
+          expr: |
+            (sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web", http_response_status_code=~"5.."}[30m])) or vector(0))
+            /
+            sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web"}[30m]))
+        - record: slo:web_error_ratio:rate1h
+          expr: |
+            (sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web", http_response_status_code=~"5.."}[1h])) or vector(0))
+            /
+            sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web"}[1h]))
+        - record: slo:web_error_ratio:rate6h
+          expr: |
+            (sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web", http_response_status_code=~"5.."}[6h])) or vector(0))
+            /
+            sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name="robot-shop", k8s_deployment_name="web"}[6h]))
+        # Handy for dashboards: availability = 1 - error ratio
+        - record: slo:web_availability:rate1h
+          expr: 1 - slo:web_error_ratio:rate1h
+
+    - name: slo-web-availability-alerts
+      rules:
+        # Fast burn: 14.4x budget rate (1h AND 5m). Budget gone in ~2 days.
+        - alert: WebAvailabilityFastBurn
+          expr: |
+            slo:web_error_ratio:rate1h > (14.4 * (1 - 0.995))
+            and
+            slo:web_error_ratio:rate5m > (14.4 * (1 - 0.995))
+          for: 2m
+          labels:
+            severity: critical
+            slo: web-availability
+          annotations:
+            summary: "Web availability SLO: FAST error-budget burn"
+            description: "web 5xx ratio is {{ $value | humanizePercentage }} over 5m and above 7.2% over 1h (14.4x the 0.5% budget). At this rate the 30-day budget is gone in ~2 days."
+            runbook_url: "https://github.com/AKPOCHI/robot-shop/blob/master/docs/slo/error-budget-policy.md"
+
+        # Slow burn: 6x budget rate (6h AND 30m). Budget gone in ~5 days.
+        - alert: WebAvailabilitySlowBurn
+          expr: |
+            slo:web_error_ratio:rate6h > (6 * (1 - 0.995))
+            and
+            slo:web_error_ratio:rate30m > (6 * (1 - 0.995))
+          for: 15m
+          labels:
+            severity: warning
+            slo: web-availability
+          annotations:
+            summary: "Web availability SLO: SLOW error-budget burn"
+            description: "web 5xx ratio is {{ $value | humanizePercentage }} over 30m and above 3% over 6h (6x the 0.5% budget). At this rate the 30-day budget is gone in ~5 days."
+            runbook_url: "https://github.com/AKPOCHI/robot-shop/blob/master/docs/slo/error-budget-policy.md"
