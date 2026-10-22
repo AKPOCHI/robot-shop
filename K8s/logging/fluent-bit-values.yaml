@@ -1,0 +1,105 @@
+# Fluent Bit DaemonSet: tail Robot Shop container logs, enrich with Kubernetes
+# metadata, derive service + level, and push to Loki.
+
+luaScripts:
+  level.lua: |
+    -- pino (Node.js) numeric levels
+    local pino = { [10]="debug", [20]="debug", [30]="info", [40]="warn", [50]="error", [60]="error" }
+
+    local function from_text(s)
+      local u = string.upper(s)
+      if string.find(u, "FATAL") or string.find(u, "CRITICAL") then return "error" end
+      if string.find(u, "ERROR") or string.find(u, "EXCEPTION") then return "error" end
+      if string.find(u, "WARN") then return "warn" end
+      if string.find(u, "DEBUG") then return "debug" end
+      return nil
+    end
+
+    function add_level(tag, ts, record)
+      local k = record["kubernetes"] or {}
+      local labels = k["labels"] or {}
+
+      -- Lift the fields we want as Loki labels to the top level
+      record["service"]   = labels["service"] or k["container_name"] or "unknown"
+      record["namespace"] = k["namespace_name"] or "unknown"
+      record["container"] = k["container_name"] or "unknown"
+      record["pod"]       = k["pod_name"]
+
+      local level = nil
+      local lvl = record["level"]
+      if type(lvl) == "number" then
+        level = pino[lvl] or "info"
+      elseif type(lvl) == "string" then
+        level = string.lower(lvl)
+        if level == "warning" then level = "warn" end
+        if level == "fatal" or level == "critical" or level == "err" then level = "error" end
+      end
+
+      if level == nil then
+        local line = record["log"] or record["msg"] or record["message"] or ""
+        -- nginx access log:  "... HTTP/1.1" 500 33 ...
+        local status = string.match(line, '" (%d%d%d) ')
+        if status then
+          local c = tonumber(status)
+          if c >= 500 then level = "error" elseif c >= 400 then level = "warn" else level = "info" end
+        else
+          level = from_text(line) or "info"
+        end
+      end
+
+      record["level"] = level
+      record["kubernetes"] = nil   -- already lifted; keeps stored lines small
+      return 2, ts, record
+    end
+
+config:
+  service: |
+    [SERVICE]
+        Daemon        Off
+        Flush         1
+        Log_Level     info
+        Parsers_File  /fluent-bit/etc/parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+        Health_Check  On
+
+  inputs: |
+    [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*_robot-shop_*.log
+        multiline.parser  cri
+        Mem_Buf_Limit     10MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+  filters: |
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Merge_Log           On
+        Keep_Log            On
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+        Labels              On
+        Annotations         Off
+
+    [FILTER]
+        Name    lua
+        Match   kube.*
+        script  /fluent-bit/scripts/level.lua
+        call    add_level
+
+  outputs: |
+    [OUTPUT]
+        Name         loki
+        Match        kube.*
+        Host         loki.logging.svc.cluster.local
+        Port         3100
+        labels       job=fluent-bit, namespace=$namespace, service=$service, container=$container, level=$level
+        line_format  json
+
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 256Mi }
