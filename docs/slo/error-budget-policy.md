@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Service** | `web` (Robot Shop storefront / API gateway, namespace `robot-shop`) |
-| **Owner** | Robot Shop team (on call: Theophilus Shaibu) |
+| **Owner** | Robot Shop team (on call: AKPOCHI TIMOTHY PAUL) |
 | **Status** | Active from 2026-10-22, reviewed quarterly |
 
 ## 1. SLI and SLO
