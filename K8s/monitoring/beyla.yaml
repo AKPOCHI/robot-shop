@@ -1,0 +1,120 @@
+# Grafana Beyla: eBPF auto-instrumentation. Produces HTTP RED metrics
+# (http_server_request_duration_seconds) for the four focus services
+# without changing their code. One agent per node (DaemonSet).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: beyla
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: beyla
+  namespace: beyla
+---
+# Read-only access so Beyla can label metrics with namespace/deployment names
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: beyla
+rules:
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "nodes"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: beyla
+subjects:
+  - kind: ServiceAccount
+    name: beyla
+    namespace: beyla
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: beyla
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beyla-config
+  namespace: beyla
+data:
+  beyla-config.yml: |
+    discovery:
+      instrument:
+        - k8s_namespace: robot-shop
+          k8s_deployment_name: web
+        - k8s_namespace: robot-shop
+          k8s_deployment_name: catalogue
+        - k8s_namespace: robot-shop
+          k8s_deployment_name: cart
+        - k8s_namespace: robot-shop
+          k8s_deployment_name: payment
+    attributes:
+      kubernetes:
+        enable: true
+    routes:
+      unmatched: heuristic
+    prometheus_export:
+      port: 9090
+      path: /metrics
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: beyla
+  namespace: beyla
+  labels:
+    app.kubernetes.io/name: beyla
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beyla
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: beyla
+    spec:
+      serviceAccountName: beyla
+      hostPID: true            # needed to see processes in other pods on the node
+      containers:
+        - name: beyla
+          image: grafana/beyla:3.27.0
+          securityContext:
+            privileged: true   # needed to load eBPF programs into the kernel
+          env:
+            - name: BEYLA_CONFIG_PATH
+              value: /config/beyla-config.yml
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: beyla-config
+---
+# Tells Prometheus (via the operator) to scrape Beyla's :9090/metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: beyla
+  namespace: beyla
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beyla
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

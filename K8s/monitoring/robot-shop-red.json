@@ -1,0 +1,196 @@
+{
+  "uid": "robot-shop-red",
+  "title": "Robot Shop - Requests, Errors, Latency",
+  "tags": ["robot-shop", "red", "beyla"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\"}, k8s_deployment_name)",
+        "query": {
+          "query": "label_values(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\"}, k8s_deployment_name)",
+          "refId": "service"
+        },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Requests / sec",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 latency",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Requests / sec by service",
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (k8s_deployment_name) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{k8s_deployment_name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Error rate % (5xx) by service",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (sum by (k8s_deployment_name) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\", http_response_status_code=~\"5..\"}[$__rate_interval])) or 0 * sum by (k8s_deployment_name) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))) / sum by (k8s_deployment_name) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{k8s_deployment_name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Latency by service (p50 / p95 / p99)",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le, k8s_deployment_name) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{k8s_deployment_name}} p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, k8s_deployment_name) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{k8s_deployment_name}} p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le, k8s_deployment_name) (rate(http_server_request_duration_seconds_bucket{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{k8s_deployment_name}} p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Requests / sec by HTTP status",
+      "gridPos": { "x": 0, "y": 21, "w": 24, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{k8s_namespace_name=\"robot-shop\", k8s_deployment_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{http_response_status_code}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    }
+  ]
+}
