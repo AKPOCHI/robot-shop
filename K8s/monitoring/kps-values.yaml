@@ -1,0 +1,45 @@
+# kube-prometheus-stack values for the Capstone 1 EKS cluster
+
+# EKS runs the control plane for us: these endpoints are not reachable,
+# so scraping them would only produce permanently "down" targets and alerts.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false   # EKS kube-proxy binds its metrics to 127.0.0.1
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    scrapeInterval: 15s
+    # Pick up ServiceMonitors/PodMonitors/rules from ANY namespace,
+    # not only ones labelled for this Helm release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { memory: 2Gi }
+
+grafana:
+  # Admin login comes from a Secret created outside git (no password in this file)
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  # Load any ConfigMap labelled grafana_dashboard=1 as a dashboard
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { memory: 256Mi }
