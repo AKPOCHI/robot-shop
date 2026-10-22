@@ -5,19 +5,13 @@ image:
   version: latest
   pullPolicy: IfNotPresent
 
-# EUM configuration
-# Provide your key and set the endpoint
-eum:
-  key: null
-  url: https://eum-eu-west-1.instana.io
-  #url: https://eum-us-west-2.instana.io
 
 # Pod Security Policy
 psp:
   enabled: false
 
 # For the mini ones minikube, minishift set to true
-nodeport: false
+nodeport: true
 
 # "special" Openshift. Set to true when deploying to any openshift flavour
 openshift: false
@@ -55,7 +49,7 @@ ratings: {}
 
 redis:
   # Storage class to use with redis statefulset.
-  storageClassName: standard
+  storageClassName: gp3
 
 shipping: {}
 
