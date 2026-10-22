@@ -1,0 +1,12 @@
+# gp3 EBS volumes via the EBS CSI driver (installed by the Capstone 1 Terraform).
+# WaitForFirstConsumer creates the disk in the same AZ as the pod that uses it.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+parameters:
+  type: gp3
+  encrypted: "true"
