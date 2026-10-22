@@ -5,7 +5,7 @@
 | **Date** | YYYY-MM-DD |
 | **Severity** | SEV1 / SEV2 / SEV3 |
 | **Duration** | HH:MM - HH:MM UTC (detection to resolution) |
-| **Author** | Theophilus Shaibu |
+| **Author** | AKPOCHI TIMOTHY PAUL |
 | **Status** | Draft / Final |
 
 *Blameless: we describe what the system and process allowed to happen, not who to blame.*
